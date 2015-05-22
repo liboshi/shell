@@ -21,13 +21,40 @@ function restart() {
 
 # Safe exit
 function safeExit() {
-        # 
-        sudo umount ~/www.example.com
+        # umount the share folder
+        sudo umount $mntFolder
         exit 1
 }
 
 # Trap user interrupt
 trap '{ echo "You stop this intallation process"; safeExit; }' INT
+
+# This function for software installation via apt-get
+function installSoftwares() {
+        sudo apt-get update
+        sudo apt-get install -y nfs-common
+        sudo apt-get install -y cifs-utils
+        sudo apt-get upgrade -y
+        installLangPkgs
+        echo "Clean..."
+        sudo apt-get autoremove -y
+        sudo apt-get autoclean -y
+}
+
+# This function for language packages installation
+function installLangPkgs() {
+        sudo apt-get install -y `check-language-support -l fr`
+        sudo apt-get install -y `check-language-support -l de`
+        sudo apt-get install -y `check-language-support -l jp`
+        sudo apt-get install -y `check-language-support -l ko`
+        sudo apt-get install -y `check-language-support -l en`
+        sudo apt-get install -y `check-language-support -l zh`
+}
+
+function enableAutoLogin() {
+        echo "Enable auto login..."
+        sudo cp -f $mntFolder/lightdm.conf /etc/lightdm/lightdm.conf
+}
 
 # This function for STAF installation.
 function installSTAF() {
@@ -37,12 +64,11 @@ function installSTAF() {
         fi
         mkdir -p ~/tmp
         echo "Copy STAF installer..."
-        cp -f ~/www.example.com/STAF3420-setup-linux.bin ~/tmp
-        # Using wget to download STAF installer
-        
+        cp -f $mntFolder/STAF3420-setup-linux.bin ~/tmp
+
         echo "Install STAF in silent mode..."
         sudo ~/tmp/STAF3420-setup-linux.bin -i silent -DACCEPT_LICENSE=1
-        
+
         echo "Check STAF installation..."
         # Change ownership to current user and root for /usr/local/staf
         if [ -d /usr/local/staf ]; then
@@ -59,7 +85,7 @@ function installSTAF() {
                 safeExit
         fi
         # A little change for startSTAFProc.sh
-        sudo cp -f startSTAFProc.sh /usr/local/staf/startSTAFProc.sh
+        sudo cp -f $mntFolder/startSTAFProc.sh /usr/local/staf/startSTAFProc.sh
 }
 
 # Add STAF to startup application list.
@@ -80,8 +106,24 @@ function addSTAFToStartupList() {
         echo "Comment[en_US]=" >> ~/.config/autostart/startSTAFProc.sh.desktop
         echo "Comment=" >> ~/.config/autostart/startSTAFProc.sh.desktop
 }
-# Mount 10.136.240.99/publish
-mkdir -p ~/www.example.com; sudo mount //www.example.com/publish ~/www.example.com -o user=<username>,password=<passwd>
+
+# Add Jenkins to startup application list.
+function addJenkinsToStartupList() {
+        echo "[Desktop Entry]" > ~/.config/autostart/jenkins.desktop
+        echo "Type=Application" >> ~/.config/autostart/jenkins.desktop
+        echo "Exec=xterm -e "/jenkins/runJenkins.sh"" >> ~/.config/autostart/jenkins.desktop
+        echo "Hidden=false" >> ~/.config/autostart/jenkins.desktop
+        echo "NoDisplay=false" >> ~/.config/autostart/jenkins.desktop
+        echo "X-GNOME-Autostart-enabled=true" >> ~/.config/autostart/jenkins.desktop
+        echo "Name[en_US]=Jenkins" >> ~/.config/autostart/jenkins.desktop
+        echo "Name=Jenkins" >> ~/.config/autostart/jenkins.desktop
+        echo "Comment[en_US]=" >> ~/.config/autostart/jenkins.desktop
+        echo "Comment=" >> ~/.config/autostart/jenkins.desktop
+        echo "Please add jenkins startup process in /jenkins/runJenkins.sh"
+}
+
+# Mount share folder
+mkdir -p $mntFolder; sudo mount $shareFolder $mntFolder -o user=administrator,password=vmware
 # Install STAF
 echo "Install STAF..."
 if hash staf 2>/dev/null; then
@@ -89,8 +131,15 @@ if hash staf 2>/dev/null; then
 else
         installSTAF
 fi
+
 echo "Add STAF to startup application list..."
 addSTAFToStartupList
+
+echo "Add Jenkins to startup appliaction list..."
+addJenkinsToStartupList
+
+echo "Install additional software..."
+installSoftwares
 
 # Restart this PC.
 read -p "Restart? [Y/N]: " response
